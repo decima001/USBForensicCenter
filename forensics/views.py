@@ -2,7 +2,7 @@ import os
 import re
 import mimetypes
 from django.shortcuts import render, redirect, get_object_or_404
-from django.http import Http404, HttpResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from forensics.models import TargetDevice, ForensicArtifact
 from forensics.detectors import monitor_and_update_devices
 from forensics.tasks import execute_usb_filesystem_scan, execute_android_vulnerability_scan
@@ -19,15 +19,11 @@ def dashboard_home(request, device_id=None):
     if device_id:
         try:
             active_device = TargetDevice.objects.get(id=device_id)
-            # FORCE DB REFRESH: Bypasses Django's local object instance memory cache
-            # to guarantee we read the 'COMPLETED' status written by the Celery worker.
             active_device.refresh_from_db()
             artifacts = active_device.artifacts.all().order_by('-severity', '-created_at')
         except TargetDevice.DoesNotExist:
-            # Safe Fallback: If device was purged during a refresh loop, jump to base path
             return redirect('dashboard_home')
     elif devices.exists():
-        # UX Optimization: Default directly to the first active attached drive available
         return redirect('device_detail', device_id=devices.first().id)
 
     context = {
@@ -53,8 +49,6 @@ def trigger_forensic_scan(request, device_id):
     Celery layers to ensure long-running audits don't freeze the HTTP server thread.
     """
     device = get_object_or_404(TargetDevice, id=device_id)
-    
-    # Transition status to scanning before offloading the task payload
     device.status = 'SCANNING'
     device.save()
     
@@ -74,22 +68,16 @@ def download_artifact_file(request, artifact_id):
     artifact = get_object_or_404(ForensicArtifact, id=artifact_id)
     device = artifact.device
 
-    # 1. Look for an absolute Windows file path (e.g., E:\folder\file.txt)
     path_match = re.search(r'(?:Path|File):\s*([a-zA-Z]:\\[^\s|]+)', artifact.extracted_data)
-    
     if path_match:
         resolved_file_path = path_match.group(1).strip()
     else:
-        # 2. Fallback: Look for a raw filename (e.g., passwords.txt) and combine it with the drive letter
         file_match = re.search(r'(?:Path|File):\s*([^\s|]+\.[a-zA-Z0-9]{2,4})', artifact.extracted_data)
-        
         if not file_match:
             raise Http404("No valid file reference or text target could be extracted from this artifact metadata.")
-        
         filename = file_match.group(1).strip()
         resolved_file_path = os.path.join(device.mount_point, filename)
 
-    # 3. Stream the target file back to the browser console window
     if os.path.exists(resolved_file_path):
         with open(resolved_file_path, 'rb') as fh:
             mime_type, _ = mimetypes.guess_type(resolved_file_path)
@@ -98,3 +86,29 @@ def download_artifact_file(request, artifact_id):
             return response
             
     raise Http404(f"Target verification failed: File not found at '{resolved_file_path}'. Check if the media device was detached.")
+
+
+def inspect_file_content(request, artifact_id):
+    """
+    NEW: Reads text file artifacts and streams raw snippets directly to the front-end interface
+    as JSON for real-time visualization without downloading the file first.
+    """
+    artifact = get_object_or_404(ForensicArtifact, id=artifact_id)
+    path_match = re.search(r'(?:Path|File):\s*([a-zA-Z]:\\[^\s|]+)', artifact.extracted_data)
+    
+    if not path_match:
+        file_match = re.search(r'(?:Path|File):\s*([^\s|]+\.[a-zA-Z0-9]{2,4})', artifact.extracted_data)
+        if not file_match:
+            return JsonResponse({"error": "No parseable path"}, status=400)
+        resolved_file_path = os.path.join(artifact.device.mount_point, file_match.group(1).strip())
+    else:
+        resolved_file_path = path_match.group(1).strip()
+
+    if os.path.exists(resolved_file_path):
+        try:
+            with open(resolved_file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                return JsonResponse({"content": f.read(5000)})  # Limit to first 5000 chars for safety
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=500)
+            
+    return JsonResponse({"error": "File not found on drive"}, status=404)
