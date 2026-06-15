@@ -78,20 +78,27 @@ def download_artifact_file(request, artifact_id):
         filename = file_match.group(1).strip()
         resolved_file_path = os.path.join(device.mount_point, filename)
 
+    # Sanity Check: If the parsed target path points to a directory rather than a file, block the read stream
+    if os.path.isdir(resolved_file_path):
+        return HttpResponse(f"Access Denied: '{resolved_file_path}' is a system directory context, not a binary file target.", status=403)
+
     if os.path.exists(resolved_file_path):
-        with open(resolved_file_path, 'rb') as fh:
-            mime_type, _ = mimetypes.guess_type(resolved_file_path)
-            response = HttpResponse(fh.read(), content_type=mime_type or "application/octet-stream")
-            response['Content-Disposition'] = f'attachment; filename="{os.path.basename(resolved_file_path)}"'
-            return response
+        try:
+            with open(resolved_file_path, 'rb') as fh:
+                mime_type, _ = mimetypes.guess_type(resolved_file_path)
+                response = HttpResponse(fh.read(), content_type=mime_type or "application/octet-stream")
+                response['Content-Disposition'] = f'attachment; filename="{os.path.basename(resolved_file_path)}"'
+                return response
+        except PermissionError:
+            return HttpResponse(f"OS Security Denied: Insufficient operational permissions to read file structure at '{resolved_file_path}'.", status=403)
             
     raise Http404(f"Target verification failed: File not found at '{resolved_file_path}'. Check if the media device was detached.")
 
 
 def inspect_file_content(request, artifact_id):
     """
-    NEW: Reads text file artifacts and streams raw snippets directly to the front-end interface
-    as JSON for real-time visualization without downloading the file first.
+    Reads text file artifacts and streams raw snippets directly to the front-end interface
+    as JSON for real-time visualization. Handles system directory edge cases cleanly.
     """
     artifact = get_object_or_404(ForensicArtifact, id=artifact_id)
     path_match = re.search(r'(?:Path|File):\s*([a-zA-Z]:\\[^\s|]+)', artifact.extracted_data)
@@ -99,16 +106,24 @@ def inspect_file_content(request, artifact_id):
     if not path_match:
         file_match = re.search(r'(?:Path|File):\s*([^\s|]+\.[a-zA-Z0-9]{2,4})', artifact.extracted_data)
         if not file_match:
-            return JsonResponse({"error": "No parseable path"}, status=400)
+            return JsonResponse({"error": "No parseable path reference identified inside artifact metadata ledger."}, status=400)
         resolved_file_path = os.path.join(artifact.device.mount_point, file_match.group(1).strip())
     else:
         resolved_file_path = path_match.group(1).strip()
 
+    # Gracefully intercept directory objects before the OS throws a PermissionError
+    if os.path.isdir(resolved_file_path):
+        return JsonResponse({
+            "content": f"[!] System Volume Information Notice:\n\nTarget path '{resolved_file_path}' is an encrypted system directory node map.\nRaw textual streaming is unavailable for direct console mapping."
+        })
+
     if os.path.exists(resolved_file_path):
         try:
             with open(resolved_file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                return JsonResponse({"content": f.read(5000)})  # Limit to first 5000 chars for safety
+                return JsonResponse({"content": f.read(5000)})
+        except PermissionError:
+            return JsonResponse({"error": f"OS Security Block: Access denied trying to read target data at '{resolved_file_path}'."}, status=403)
         except Exception as e:
-            return JsonResponse({"error": str(e)}, status=500)
+            return JsonResponse({"error": f"Internal File Error: {str(e)}"}, status=500)
             
-    return JsonResponse({"error": "File not found on drive"}, status=404)
+    return JsonResponse({"error": f"File tracking target missing or inaccessible at location: '{resolved_file_path}'."}, status=404)
