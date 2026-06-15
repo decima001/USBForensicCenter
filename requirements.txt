@@ -1,0 +1,20 @@
+# Web Framework
+Django>=6.0.0
+
+# Task Queue & Broker
+celery>=5.6.3
+redis>=5.2.0
+billiard>=4.2.1
+kombu>=5.4.2
+
+# Forensic & Utility Libraries
+python-magic-bin>=0.4.14
+# Note: On Linux/macOS, use 'python-magic' instead. 
+# 'python-magic-bin' includes the necessary DLLs for Windows.
+
+# Database & System Drivers
+psycopg2-binary>=2.9.10
+# (Optional) If you decide to move away from SQLite in the future.
+
+# Security & Parsing
+regex>=2024.11.6
