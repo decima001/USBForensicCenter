@@ -63,24 +63,34 @@ def trigger_forensic_scan(request, device_id):
 
 def download_artifact_file(request, artifact_id):
     """
-    Resolves the exact file path parsed inside a specific ForensicArtifact 
-    and pipes it directly back to the analyst browser as an attachment download.
+    Resolves the target file name or absolute path from a specific ForensicArtifact,
+    binds it cleanly to the hardware mount point, and handles the download pipeline.
     """
     artifact = get_object_or_404(ForensicArtifact, id=artifact_id)
-    
-    # Use regex routing to isolate the path string inside our extracted data block
+    device = artifact.device
+
+    # 1. Look for an absolute Windows file path (e.g., E:\folder\file.txt)
     path_match = re.search(r'(?:Path|File):\s*([a-zA-Z]:\\[^\s|]+)', artifact.extracted_data)
     
-    if not path_match:
-        raise Http404("No absolute disk file path could be parsed from this artifact metadata payload.")
-    
-    resolved_file_path = path_match.group(1).strip()
-    
+    if path_match:
+        resolved_file_path = path_match.group(1).strip()
+    else:
+        # 2. Fallback: Look for a raw filename (e.g., passwords.txt) and combine it with the drive letter
+        file_match = re.search(r'(?:Path|File):\s*([^\s|]+\.[a-zA-Z0-9]{2,4})', artifact.extracted_data)
+        
+        if not file_match:
+            raise Http404("No valid file reference or text target could be extracted from this artifact metadata.")
+        
+        filename = file_match.group(1).strip()
+        # Ensure the device mount point is treated cleanly (e.g., joining "E:\" and "passwords.txt")
+        resolved_file_path = os.path.join(device.mount_point, filename)
+
+    # 3. Stream the target file back to the browser console window
     if os.path.exists(resolved_file_path):
         with open(resolved_file_path, 'rb') as fh:
             mime_type, _ = mimetypes.guess_type(resolved_file_path)
             response = HttpResponse(fh.read(), content_type=mime_type or "application/octet-stream")
-            response['Content-Disposition'] = f'attachment; filename={os.path.basename(resolved_file_path)}'
+            response['Content-Disposition'] = f'attachment; filename="{os.path.basename(resolved_file_path)}"'
             return response
             
-    raise Http404("The requested file no longer exists on the target media or device was detached.")
+    raise Http404(f"Target verification failed: File not found at '{resolved_file_path}'. Check if the media device was detached.")
