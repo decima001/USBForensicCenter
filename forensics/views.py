@@ -1,129 +1,32 @@
-import os
-import re
-import mimetypes
-from django.shortcuts import render, redirect, get_object_or_404
-from django.http import Http404, HttpResponse, JsonResponse
-from forensics.models import TargetDevice, ForensicArtifact
-from forensics.detectors import monitor_and_update_devices
-from forensics.tasks import execute_usb_filesystem_scan, execute_android_vulnerability_scan
+# ... (Keep all your existing imports and views at the top)
 
-def dashboard_home(request, device_id=None):
+def update_case_metadata(request, device_id):
     """
-    Renders the core forensic tracking engine panel workspace matrix.
-    Queries active system hardware registers and pulls explicit state changes.
-    """
-    devices = TargetDevice.objects.all().order_by('-detected_at')
-    active_device = None
-    artifacts = []
-
-    if device_id:
-        try:
-            active_device = TargetDevice.objects.get(id=device_id)
-            active_device.refresh_from_db()
-            artifacts = active_device.artifacts.all().order_by('-severity', '-created_at')
-        except TargetDevice.DoesNotExist:
-            return redirect('dashboard_home')
-    elif devices.exists():
-        return redirect('device_detail', device_id=devices.first().id)
-
-    context = {
-        'devices': devices,
-        'active_device': active_device,
-        'artifacts': artifacts
-    }
-    return render(request, 'forensics/dashboard.html', context)
-
-
-def trigger_hardware_scan(request):
-    """
-    Triggers the physical hardware mapping routing loop directly
-    to discover connected USB storage units or ADB instances.
-    """
-    monitor_and_update_devices()
-    return redirect('dashboard_home')
-
-
-def trigger_forensic_scan(request, device_id):
-    """
-    Pipes high-density deep forensics scraping routines off to background 
-    Celery layers to ensure long-running audits don't freeze the HTTP server thread.
+    Saves investigator case logs and reference numbers to the active device.
+    Ensures structural data tags stick to the target workspace profile.
     """
     device = get_object_or_404(TargetDevice, id=device_id)
-    device.status = 'SCANNING'
-    device.save()
     
-    if device.device_type == 'USB':
-        execute_usb_filesystem_scan.delay(device.device_id)
-    elif device.device_type == 'ANDROID':
-        execute_android_vulnerability_scan.delay(device.device_id)
+    if request.method == "POST":
+        device.case_number = request.POST.get('case_number', device.case_number).strip()
+        device.investigator_name = request.POST.get('investigator_name', device.investigator_name).strip()
+        device.case_notes = request.POST.get('case_notes', device.case_notes).strip()
+        device.save()
         
     return redirect('device_detail', device_id=device.id)
 
 
-def download_artifact_file(request, artifact_id):
+def export_case_report(request, device_id):
     """
-    Resolves the target file name or absolute path from a specific ForensicArtifact,
-    binds it cleanly to the hardware mount point, and handles the download pipeline.
+    Generates a clean operational triage summary report document.
+    Formatted explicitly for legal archiving, team distribution, or printing.
     """
-    artifact = get_object_or_404(ForensicArtifact, id=artifact_id)
-    device = artifact.device
-
-    path_match = re.search(r'(?:Path|File):\s*([a-zA-Z]:\\[^\s|]+)', artifact.extracted_data)
-    if path_match:
-        resolved_file_path = path_match.group(1).strip()
-    else:
-        file_match = re.search(r'(?:Path|File):\s*([^\s|]+\.[a-zA-Z0-9]{2,4})', artifact.extracted_data)
-        if not file_match:
-            raise Http404("No valid file reference or text target could be extracted from this artifact metadata.")
-        filename = file_match.group(1).strip()
-        resolved_file_path = os.path.join(device.mount_point, filename)
-
-    # Sanity Check: If the parsed target path points to a directory rather than a file, block the read stream
-    if os.path.isdir(resolved_file_path):
-        return HttpResponse(f"Access Denied: '{resolved_file_path}' is a system directory context, not a binary file target.", status=403)
-
-    if os.path.exists(resolved_file_path):
-        try:
-            with open(resolved_file_path, 'rb') as fh:
-                mime_type, _ = mimetypes.guess_type(resolved_file_path)
-                response = HttpResponse(fh.read(), content_type=mime_type or "application/octet-stream")
-                response['Content-Disposition'] = f'attachment; filename="{os.path.basename(resolved_file_path)}"'
-                return response
-        except PermissionError:
-            return HttpResponse(f"OS Security Denied: Insufficient operational permissions to read file structure at '{resolved_file_path}'.", status=403)
-            
-    raise Http404(f"Target verification failed: File not found at '{resolved_file_path}'. Check if the media device was detached.")
-
-
-def inspect_file_content(request, artifact_id):
-    """
-    Reads text file artifacts and streams raw snippets directly to the front-end interface
-    as JSON for real-time visualization. Handles system directory edge cases cleanly.
-    """
-    artifact = get_object_or_404(ForensicArtifact, id=artifact_id)
-    path_match = re.search(r'(?:Path|File):\s*([a-zA-Z]:\\[^\s|]+)', artifact.extracted_data)
+    device = get_object_or_404(TargetDevice, id=device_id)
+    # Pull artifacts ordered by critical/high priority first to headline the report
+    artifacts = device.artifacts.all().order_by('-severity', '-created_at')
     
-    if not path_match:
-        file_match = re.search(r'(?:Path|File):\s*([^\s|]+\.[a-zA-Z0-9]{2,4})', artifact.extracted_data)
-        if not file_match:
-            return JsonResponse({"error": "No parseable path reference identified inside artifact metadata ledger."}, status=400)
-        resolved_file_path = os.path.join(artifact.device.mount_point, file_match.group(1).strip())
-    else:
-        resolved_file_path = path_match.group(1).strip()
-
-    # Gracefully intercept directory objects before the OS throws a PermissionError
-    if os.path.isdir(resolved_file_path):
-        return JsonResponse({
-            "content": f"[!] System Volume Information Notice:\n\nTarget path '{resolved_file_path}' is an encrypted system directory node map.\nRaw textual streaming is unavailable for direct console mapping."
-        })
-
-    if os.path.exists(resolved_file_path):
-        try:
-            with open(resolved_file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                return JsonResponse({"content": f.read(5000)})
-        except PermissionError:
-            return JsonResponse({"error": f"OS Security Block: Access denied trying to read target data at '{resolved_file_path}'."}, status=403)
-        except Exception as e:
-            return JsonResponse({"error": f"Internal File Error: {str(e)}"}, status=500)
-            
-    return JsonResponse({"error": f"File tracking target missing or inaccessible at location: '{resolved_file_path}'."}, status=404)
+    context = {
+        'device': device,
+        'artifacts': artifacts,
+    }
+    return render(request, 'forensics/report_export.html', context)
