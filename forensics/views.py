@@ -1,4 +1,8 @@
+import os
+import re
+import mimetypes
 from django.shortcuts import render, redirect, get_object_or_404
+from django.http import Http404, HttpResponse
 from forensics.models import TargetDevice, ForensicArtifact
 from forensics.detectors import monitor_and_update_devices
 from forensics.tasks import execute_usb_filesystem_scan, execute_android_vulnerability_scan
@@ -55,3 +59,28 @@ def trigger_forensic_scan(request, device_id):
         execute_android_vulnerability_scan.delay(device.device_id)
         
     return redirect('device_detail', device_id=device.id)
+
+
+def download_artifact_file(request, artifact_id):
+    """
+    Resolves the exact file path parsed inside a specific ForensicArtifact 
+    and pipes it directly back to the analyst browser as an attachment download.
+    """
+    artifact = get_object_or_404(ForensicArtifact, id=artifact_id)
+    
+    # Use regex routing to isolate the path string inside our extracted data block
+    path_match = re.search(r'(?:Path|File):\s*([a-zA-Z]:\\[^\s|]+)', artifact.extracted_data)
+    
+    if not path_match:
+        raise Http404("No absolute disk file path could be parsed from this artifact metadata payload.")
+    
+    resolved_file_path = path_match.group(1).strip()
+    
+    if os.path.exists(resolved_file_path):
+        with open(resolved_file_path, 'rb') as fh:
+            mime_type, _ = mimetypes.guess_type(resolved_file_path)
+            response = HttpResponse(fh.read(), content_type=mime_type or "application/octet-stream")
+            response['Content-Disposition'] = f'attachment; filename={os.path.basename(resolved_file_path)}'
+            return response
+            
+    raise Http404("The requested file no longer exists on the target media or device was detached.")
