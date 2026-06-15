@@ -10,6 +10,8 @@
         body { background-color: #0b0f19; color: #f3f4f6; }
         .cyber-panel { background-color: #111827; border: 1px solid #1f2937; }
         .cyber-glow { box-shadow: 0 0 15px rgba(34, 211, 238, 0.2); }
+        /* Smooth fade tracking for the inspection console workspace */
+        .modal-backdrop { transition: opacity 0.25s ease, visibility 0.25s ease; }
     </style>
 </head>
 <body class="font-sans antialiased">
@@ -154,14 +156,19 @@
                                 <td class="px-6 py-4 font-mono text-xs text-cyan-400/90 max-w-xs truncate" title="{{ artifact.extracted_data }}">
                                     {{ artifact.extracted_data }}
                                 </td>
-                                <td class="px-6 py-4 whitespace-nowrap text-right text-xs font-bold">
+                                <td class="px-6 py-4 whitespace-nowrap text-right space-x-1.5">
                                     {% if "File:" in artifact.extracted_data or "Path:" in artifact.extracted_data %}
-                                        <a href="{% url 'download_evidence' artifact.id %}" class="bg-cyan-950 text-cyan-400 hover:bg-cyan-400 hover:text-gray-950 px-3 py-1.5 rounded border border-cyan-500/30 transition duration-150 inline-flex items-center space-x-1">
+                                        <button onclick="openInspectionModal({{ artifact.id }}, '{{ artifact.title|escapejs }}')" class="bg-gray-800 hover:bg-gray-700 text-gray-200 px-3 py-1.5 rounded border border-gray-700 transition duration-150 inline-flex items-center space-x-1 text-xs cursor-pointer">
+                                            <i class="fa-solid fa-eye"></i>
+                                            <span>Inspect Content</span>
+                                        </button>
+                                        
+                                        <a href="{% url 'download_evidence' artifact.id %}" class="bg-cyan-950 text-cyan-400 hover:bg-cyan-400 hover:text-gray-950 px-3 py-1.5 rounded border border-cyan-500/30 transition duration-150 inline-flex items-center space-x-1 text-xs">
                                             <i class="fa-solid fa-download"></i>
-                                            <span>Download File</span>
+                                            <span>Download</span>
                                         </a>
                                     {% else %}
-                                        <span class="text-gray-600 italic">No File Context</span>
+                                        <span class="text-gray-600 italic text-xs">No File Context</span>
                                     {% endif %}
                                 </td>
                             </tr>
@@ -191,6 +198,39 @@
         </main>
     </div>
 
+    <div id="inspectionModal" class="modal-backdrop fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 opacity-0 pointer-events-none invisible">
+        <div class="cyber-panel w-full max-w-4xl rounded-xl shadow-2xl border border-cyan-500/30 flex flex-col max-h-[85vh] transform scale-95 transition-all duration-200">
+            <div class="px-6 py-4 border-b border-gray-800 flex items-center justify-between bg-gray-900/60 rounded-t-xl">
+                <div class="flex items-center space-x-2.5">
+                    <i class="fa-solid fa-code text-cyan-400 text-lg"></i>
+                    <div>
+                        <h3 class="font-black text-white text-base tracking-wide">Live File Data Carving Console</h3>
+                        <p id="modalFileTitle" class="text-xs text-gray-400 font-mono mt-0.5 truncate max-w-xl">Target Artifact Workspace</p>
+                    </div>
+                </div>
+                <button onclick="closeInspectionModal()" class="text-gray-400 hover:text-white transition text-lg bg-gray-800 hover:bg-gray-700 h-8 w-8 rounded-lg flex items-center justify-center border border-gray-700 cursor-pointer">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="p-6 overflow-y-auto bg-gray-950 flex-1 font-mono text-sm leading-relaxed relative">
+                <div id="modalLoading" class="absolute inset-0 bg-gray-950/90 flex flex-col items-center justify-center space-y-3 transition opacity duration-150">
+                    <i class="fa-solid fa-spinner animate-spin text-cyan-400 text-3xl"></i>
+                    <p class="text-xs text-cyan-400/80 uppercase tracking-widest font-bold">Mounting file buffer stream...</p>
+                </div>
+                
+                <pre class="overflow-x-auto"><code id="modalCodeBody" class="text-emerald-400 block whitespace-pre-wrap"></code></pre>
+            </div>
+
+            <div class="px-6 py-3 border-t border-gray-800 bg-gray-900/40 rounded-b-xl flex justify-between items-center text-xs">
+                <span class="text-gray-500 font-mono font-semibold uppercase">Status: Read-Only Triage Channel</span>
+                <button onclick="closeInspectionModal()" class="bg-gray-800 hover:bg-gray-700 border border-gray-700 text-white font-bold px-4 py-2 rounded-lg transition cursor-pointer">
+                    Close Workspace
+                </button>
+            </div>
+        </div>
+    </div>
+
     <script>
         document.addEventListener("DOMContentLoaded", function () {
             // Locate the scanning status item using the CSS pulse animation signature
@@ -199,19 +239,16 @@
             if (scanningBadge) {
                 console.log("[+] Active scan detected. Initializing real-time telemetry polling engine...");
                 
-                // Query the view endpoint every 3 seconds
                 const pollInterval = setInterval(async () => {
                     try {
                         const response = await fetch(window.location.href);
                         if (response.ok) {
                             const htmlText = await response.text();
                             
-                            // Parse context to check if the running state has modified
                             const parser = new DOMParser();
                             const doc = parser.parseFromString(htmlText, 'text/html');
                             const updatedBadge = doc.querySelector('[class*="animate-pulse"]');
                             
-                            // If the scanning animations have vanished from the payload, update the interface
                             if (!updatedBadge) {
                                 console.log("[+] Scan state change finalized. Re-rendering dashboard layout.");
                                 clearInterval(pollInterval);
@@ -224,6 +261,56 @@
                 }, 3000);
             }
         });
+
+        // ==========================================
+        //  ASYNCHRONOUS EVIDENCE INSPECTION MODAL MODULATOR
+        // ==========================================
+        const modal = document.getElementById('inspectionModal');
+        const modalContent = modal.querySelector('.cyber-panel');
+        const modalTitle = document.getElementById('modalFileTitle');
+        const modalCodeBody = document.getElementById('modalCodeBody');
+        const modalLoading = document.getElementById('modalLoading');
+
+        async function openInspectionModal(artifactId, artifactTitle) {
+            // Display modal backdrop and reset content containers
+            modalTitle.textContent = artifactTitle;
+            modalCodeBody.textContent = "";
+            modalLoading.style.opacity = '1';
+            modalLoading.style.pointerEvents = 'auto';
+            
+            modal.classList.remove('opacity-0', 'pointer-events-none', 'invisible');
+            modalContent.classList.remove('scale-95');
+            modalContent.classList.add('scale-100');
+
+            try {
+                // Execute active AJAX retrieval call against the inspect endpoint
+                const response = await fetch(`/inspect-evidence/${artifactId}/`);
+                const data = await response.json();
+
+                if (response.ok) {
+                    // Populate file content cleanly into text block
+                    modalCodeBody.textContent = data.content || "[+] Target verification pass: File buffer initialized but content returned completely blank.";
+                } else {
+                    modalCodeBody.textContent = `[-] Hardware Error: ${data.error || 'Failed to open file stream context.'}`;
+                }
+            } catch (err) {
+                modalCodeBody.textContent = `[-] Target Fetch Interruption: ${err.message}`;
+            } finally {
+                // Smoothly dim loading sheet out of workspace vision
+                modalLoading.style.opacity = '0';
+                modalLoading.style.pointerEvents = 'none';
+            }
+        }
+
+        function closeInspectionModal() {
+            modalContent.classList.remove('scale-100');
+            modalContent.classList.add('scale-95');
+            modal.classList.add('opacity-0', 'pointer-events-none', 'invisible');
+        }
+
+        // Close modal immediately if analyst hits escape or clicks outside the boundaries
+        window.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeInspectionModal(); });
+        modal.addEventListener('click', (e) => { if (e.target === modal) closeInspectionModal(); });
     </script>
 </body>
 </html>
