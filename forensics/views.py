@@ -18,11 +18,13 @@ def dashboard_home(request):
 # --- OPERATIONAL TOOLS ---
 def trigger_forensic_scan(request, device_id):
     device = get_object_or_404(TargetDevice, device_id=device_id)
-    # Ensure .delay() is being called
-    if device.device_type == 'ANDROID': 
-        execute_android_vulnerability_scan.delay(device.device_id)
-    else: 
-        execute_usb_filesystem_scan.delay(device.device_id)
+    
+    # Check if a scan is already running for this device
+    if device.status == 'SCANNING':
+        # Don't trigger a new one if we are already working
+        return redirect(f'/?device_id={device.device_id}')
+
+    execute_usb_filesystem_scan.delay(device.device_id)
     return redirect(f'/?device_id={device.device_id}')
 
 def inspect_file_content(request, artifact_id):

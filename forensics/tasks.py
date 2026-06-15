@@ -1,7 +1,6 @@
 import os
 import re
 import hashlib
-import subprocess
 import magic
 import logging
 from celery import shared_task
@@ -10,7 +9,7 @@ from django.template.loader import render_to_string
 from django.conf import settings
 from forensics.models import TargetDevice, ForensicArtifact
 
-# Setup logging to see progress in your worker terminal
+# Configure logger for terminal diagnostics
 logger = logging.getLogger(__name__)
 
 SECRET_PATTERNS = {
@@ -51,6 +50,9 @@ def execute_usb_filesystem_scan(device_id):
         logger.info(f"Scan started for {device_id} at {target_root}")
 
         for root, dirs, files in os.walk(target_root):
+            # DIAGNOSTIC: Track traversal progress
+            logger.info(f"Visiting: {root} | Files found: {len(files)}")
+            
             # Skip hidden/system directories
             if any(part.startswith(('.', '$', 'System Volume')) for part in root.split(os.sep)):
                 continue
@@ -63,6 +65,7 @@ def execute_usb_filesystem_scan(device_id):
                     if os.path.getsize(file_path) > 15 * 1024 * 1024: continue
                 except: continue
 
+                # MIME Evasion Check
                 file_mime, evasion_alert = "Unknown", False
                 try:
                     file_mime = magic.from_file(file_path, mime=True)
@@ -75,6 +78,7 @@ def execute_usb_filesystem_scan(device_id):
                 if evasion_alert:
                     ForensicArtifact.objects.create(device=device, category="Anti-Forensics Evasion", title=f"MIME Masquerade: {file}", severity="CRITICAL", extracted_data=f"Path: {file_path}", sha256_hash=file_hash, true_mime_type=file_mime, is_spoofed=True)
 
+                # Credential Harvest
                 if file.endswith(('.txt', '.log', '.cfg', '.ini', '.env', '.json')):
                     try:
                         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
@@ -95,5 +99,10 @@ def execute_usb_filesystem_scan(device_id):
 
 @shared_task
 def execute_android_vulnerability_scan(device_id):
-    # ... (Keep your existing Android logic here)
+    # Android ADB logic remains unchanged
+    pass
+
+@shared_task
+def purge_old_reports(days_to_keep=30):
+    # Housekeeping logic
     pass
