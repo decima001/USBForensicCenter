@@ -17,13 +17,18 @@ def dashboard_home(request, device_id=None):
     artifacts = []
 
     if device_id:
-        active_device = get_object_or_404(TargetDevice, id=device_id)
-        
-        # FORCE DB REFRESH: Bypasses Django's local object instance memory cache
-        # to guarantee we read the 'COMPLETED' status written by the Celery worker.
-        active_device.refresh_from_db()
-        
-        artifacts = active_device.artifacts.all().order_by('-severity', '-created_at')
+        try:
+            active_device = TargetDevice.objects.get(id=device_id)
+            # FORCE DB REFRESH: Bypasses Django's local object instance memory cache
+            # to guarantee we read the 'COMPLETED' status written by the Celery worker.
+            active_device.refresh_from_db()
+            artifacts = active_device.artifacts.all().order_by('-severity', '-created_at')
+        except TargetDevice.DoesNotExist:
+            # Safe Fallback: If device was purged during a refresh loop, jump to base path
+            return redirect('dashboard_home')
+    elif devices.exists():
+        # UX Optimization: Default directly to the first active attached drive available
+        return redirect('device_detail', device_id=devices.first().id)
 
     context = {
         'devices': devices,
@@ -82,7 +87,6 @@ def download_artifact_file(request, artifact_id):
             raise Http404("No valid file reference or text target could be extracted from this artifact metadata.")
         
         filename = file_match.group(1).strip()
-        # Ensure the device mount point is treated cleanly (e.g., joining "E:\" and "passwords.txt")
         resolved_file_path = os.path.join(device.mount_point, filename)
 
     # 3. Stream the target file back to the browser console window

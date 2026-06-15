@@ -27,7 +27,7 @@ def execute_usb_filesystem_scan(device_id):
     """
     Weaponized Forensic Task.
     Physically maps the mounted directory structure, calculates hashes, flags hidden components,
-    and inspects plaintext text files for sensitive leaked credentials.
+    inspects plaintext files for leaks, and carves data payloads from the Recycle Bin.
     """
     print(f"[+] Launching live hardware analysis sequence for target: {device_id}")
     
@@ -58,19 +58,42 @@ def execute_usb_filesystem_scan(device_id):
                 category="System Volume",
                 title=f"Protected Directory Monitored: {os.path.basename(root)}",
                 severity="HIGH",
-                extracted_data=f"Absolute System Path: {root} | Analysis: Common staging area for persistent payloads."
+                extracted_data=f"Absolute System Path: {root} | Analysis: Common staging area for persistent payloads or deleted data."
             )
             discovered_logs_count += 1
 
         for file in files:
             file_path = os.path.join(root, file)
             
-            # Skip massive locked operating system system files to save computational overhead
-            if os.path.getsize(file_path) > 10 * 1024 * 1024: # 10MB limit
+            # Skip massive files (>10MB) to preserve processing overhead and memory stability
+            try:
+                if os.path.getsize(file_path) > 10 * 1024 * 1024:
+                    continue
+            except Exception:
                 continue
 
-            # 2. File Analysis Check: Hunt for text files to inspect for data leaks
-            if file.endswith(('.txt', '.log', '.cfg', '.ini', '.env', '.json')):
+            # 2. Deep Triage: Parse deleted content strings hiding inside the Recycle Bin ($RECYCLE.BIN)
+            if "$RECYCLE.BIN" in root:
+                # Target active data payload files ($R) matching text or backup extensions
+                if file.startswith("$R") and file.endswith(('.txt', '.log', '.env', '.json', '.bak', '.cfg', '.ini')):
+                    try:
+                        with open(file_path, 'r', encoding='utf-8', errors='ignore') as deleted_file:
+                            deleted_content = deleted_file.read().strip()
+                            
+                            if deleted_content:
+                                ForensicArtifact.objects.get_or_create(
+                                    device=device,
+                                    category="Recycle Bin Carving",
+                                    title=f"Carved Content from Deleted File: {file}",
+                                    severity="HIGH",
+                                    extracted_data=f"File: {file_path} | Deleted Snippet: {deleted_content[:120]} | SHA256: {calculate_sha256(file_path)}"
+                                )
+                                discovered_logs_count += 1
+                    except Exception as e:
+                        print(f"[-] Error reading recycled artifact {file}: {e}")
+
+            # 3. File Content Analysis: Hunt regular files for plaintext credential leaks
+            if file.endswith(('.txt', '.log', '.cfg', '.ini', '.env', '.json')) and "$RECYCLE.BIN" not in root:
                 try:
                     with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                         content = f.read()
@@ -90,7 +113,7 @@ def execute_usb_filesystem_scan(device_id):
                 except Exception as e:
                     print(f"[-] Access error while reading {file_path}: {e}")
 
-            # 3. Extension Spoofing / Risk Triage: Flag dangerous payloads
+            # 4. Extension Spoofing / Risk Triage: Flag dangerous executable payloads
             if file.endswith(('.exe', '.bat', '.ps1', '.vbs', '.scr')):
                 ForensicArtifact.objects.get_or_create(
                     device=device,
@@ -101,7 +124,7 @@ def execute_usb_filesystem_scan(device_id):
                 )
                 discovered_logs_count += 1
 
-    # Finalize state metrics
+    # Finalize state metrics via timezone-aware parameters
     device.status = 'COMPLETED'
     device.last_scanned_at = timezone.now()
     device.save()
