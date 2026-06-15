@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { font-family: sans-serif; padding: 40px; color: #333; }
+        .header { border-bottom: 2px solid #000; margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ccc; padding: 10px; text-align: left; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Forensic Triage Report</h1>
+        <p><strong>Device ID:</strong> {{ device.device_id }}</p>
+        <p><strong>Case:</strong> {{ device.case_number }}</p>
+    </div>
+    
+    <h3>Discovered Artifacts</h3>
+    <table>
+        <thead><tr><th>Severity</th><th>Category</th><th>Details</th></tr></thead>
+        <tbody>
+            {% for art in artifacts %}
+            <tr>
+                <td>{{ art.severity }}</td>
+                <td>{{ art.category }}</td>
+                <td>{{ art.extracted_data }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</body>
+</html>

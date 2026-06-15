@@ -7,35 +7,19 @@
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        /* Cyber-Theme Dashboard Elements */
-        .cyber-bg {
-            background: linear-gradient(135deg, #030712 0%, #0b1528 100%);
-        }
-        .glow-cyan:hover {
-            box-shadow: 0 0 15px rgba(34, 211, 238, 0.2);
-        }
+        .cyber-bg { background: linear-gradient(135deg, #030712 0%, #0b1528 100%); }
     </style>
 </head>
 <body class="cyber-bg text-gray-200 min-h-screen font-sans antialiased">
 
-    <header class="border-b border-gray-800 bg-gray-950/60 backdrop-blur-md sticky top-0 z-50 px-6 py-4 flex items-center justify-between">
+    <header class="border-b border-gray-800 bg-gray-950/60 backdrop-blur-md px-6 py-4 flex items-center justify-between">
         <div class="flex items-center space-x-3">
             <div class="bg-cyan-500/10 p-2 rounded-lg border border-cyan-500/30">
                 <i class="fa-solid fa-shield-halved text-cyan-400 text-xl"></i>
             </div>
             <div>
                 <h1 class="text-base font-black tracking-wider text-white font-mono uppercase">Threat Center</h1>
-                <p class="text-[10px] text-gray-400 font-mono">FORENSIC ACQUISITION ENGINE // v2.4</p>
-            </div>
-        </div>
-        <div class="flex items-center space-x-4 text-xs font-mono">
-            <div class="hidden sm:flex items-center space-x-2 bg-gray-900 border border-gray-800 px-3 py-1.5 rounded-md">
-                <span class="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                <span class="text-gray-400">QUEUE STATUS:</span>
-                <span class="text-white font-bold">READY</span>
-            </div>
-            <div class="text-gray-400">
-                <i class="fa-regular fa-clock mr-1 text-cyan-400"></i> 2026-06-15 15:00 UTC
+                <p class="text-[10px] text-gray-400 font-mono">FORENSIC ACQUISITION ENGINE // v2.6</p>
             </div>
         </div>
     </header>
@@ -44,34 +28,27 @@
         
         <aside class="lg:col-span-1 space-y-4">
             <div class="rounded-xl border border-gray-800 bg-gray-950/40 p-4 backdrop-blur-md">
-                <h2 class="text-xs font-bold uppercase tracking-wider text-gray-400 font-mono mb-3 flex items-center justify-between">
-                    <span>Target Hardware Nodes</span>
-                    <i class="fa-solid fa-server text-cyan-500"></i>
-                </h2>
-                
-                <div class="space-y-2.5">
+                <h2 class="text-xs font-bold uppercase tracking-wider text-gray-400 font-mono mb-3">Target Hardware Nodes</h2>
+                <div class="space-y-2">
                     {% for dev in devices %}
-                    <a href="?device_id={{ dev.device_id }}" class="block p-3.5 rounded-lg border {% if active_device.device_id == dev.device_id %} border-cyan-500 bg-cyan-950/20 text-white {% else %} border-gray-800 bg-gray-900/30 text-gray-400 hover:border-gray-700 hover:bg-gray-900/50 {% endif %} transition duration-150 relative overflow-hidden group glow-cyan">
-                        <div class="flex items-start justify-between">
-                            <div class="flex items-center space-x-3">
-                                {% if dev.device_type == 'ANDROID' %}
-                                    <i class="fa-brands fa-android text-lg {% if active_device.device_id == dev.device_id %} text-cyan-400 {% else %} text-gray-500 {% endif %}"></i>
-                                {% else %}
-                                    <i class="fa-solid fa-usb text-lg {% if active_device.device_id == dev.device_id %} text-cyan-400 {% else %} text-gray-500 {% endif %}"></i>
-                                {% endif %}
-                                <div>
-                                    <p class="text-xs font-bold font-mono tracking-wide text-gray-200">{{ dev.mount_point }}</p>
-                                    <p class="text-[10px] font-mono text-gray-500 mt-0.5">{{ dev.device_id|slice:":18" }}...</p>
-                                </div>
-                            </div>
-                            <span class="text-[9px] font-mono font-bold uppercase px-1.5 py-0.5 rounded {% if dev.status == 'COMPLETED' %} bg-emerald-950/50 text-emerald-400 border border-emerald-800/50 {% elif dev.status == 'SCANNING' %} bg-amber-950/50 text-amber-400 border border-amber-800/50 animate-pulse {% else %} bg-gray-900 text-gray-500 border border-gray-800 {% endif %}">
-                                {{ dev.status }}
-                            </span>
-                        </div>
+                    <a href="?device_id={{ dev.device_id }}" class="block p-3 rounded-lg border {% if active_device.device_id == dev.device_id %} border-cyan-500 bg-cyan-950/20 {% else %} border-gray-800 bg-gray-900/30 {% endif %} transition">
+                        <p class="text-xs font-bold text-white">{{ dev.mount_point }}</p>
+                        <p class="text-[10px] text-gray-500 font-mono">{{ dev.device_id|slice:":15" }}...</p>
                     </a>
-                    {% empty %}
-                    <div class="text-center py-6 border border-dashed border-gray-800 rounded-lg">
-                        <p class="text-xs text-gray-500 font-mono">No target storage nodes indexed.</p>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="rounded-xl border border-gray-800 bg-gray-950/40 p-4 backdrop-blur-md">
+                <h2 class="text-xs font-bold uppercase tracking-wider text-gray-400 font-mono mb-3 flex items-center justify-between">
+                    <span>Host Registry History</span>
+                    <i class="fa-solid fa-clock-rotate-left text-amber-500"></i>
+                </h2>
+                <div class="space-y-2 max-h-64 overflow-y-auto pr-1">
+                    {% for record in host_history %}
+                    <div class="p-2.5 bg-gray-900/40 border border-gray-800 rounded font-mono text-[10px]">
+                        <div class="text-white font-bold">{{ record.vendor }} {{ record.product }}</div>
+                        <p class="text-[9px] text-gray-500 mt-1 truncate">SN: {{ record.serial }}</p>
                     </div>
                     {% endfor %}
                 </div>
@@ -79,153 +56,55 @@
         </aside>
 
         <main class="lg:col-span-3 space-y-6">
-            
             {% if active_device %}
             <div class="rounded-xl border border-gray-800 bg-gray-950/40 p-6 backdrop-blur-md shadow-2xl">
-                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-gray-800 pb-4 mb-4 gap-3">
-                    <div class="flex items-center space-x-2.5">
-                        <div class="h-2 w-2 rounded-full bg-cyan-400 animate-pulse"></div>
-                        <i class="fa-solid fa-folder-open text-cyan-400 text-lg"></i>
-                        <h3 class="text-sm font-bold uppercase tracking-widest text-white font-mono">Operational Case Briefing</h3>
-                    </div>
-                    <div>
-                        <a href="{% url 'export_case_report' active_device.id %}" target="_blank" class="inline-flex items-center space-x-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs px-4 py-2 rounded-lg shadow-lg shadow-emerald-900/20 transition-all duration-200 hover:-translate-y-0.5">
-                            <i class="fa-solid fa-file-export text-sm"></i>
-                            <span>Generate Briefing Report</span>
-                        </a>
-                    </div>
-                </div>
-                
-                <form method="POST" action="{% url 'update_case_metadata' active_device.id %}" class="space-y-4">
+                <h3 class="text-sm font-bold uppercase tracking-widest text-white font-mono mb-4 border-b border-gray-800 pb-2">Operational Case Briefing</h3>
+                <form method="POST" action="{% url 'update_case_metadata' active_device.device_id %}" class="space-y-4">
                     {% csrf_token %}
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-wider font-mono mb-1.5">Case Designation Reference</label>
-                            <div class="relative">
-                                <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-500 font-mono text-xs">#</span>
-                                <input type="text" name="case_number" value="{{ active_device.case_number }}" placeholder="e.g., CASE-2026-X9" class="w-full bg-gray-950 border border-gray-800 rounded-lg pl-7 pr-3 py-2 text-sm text-white font-mono focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none transition duration-150">
-                            </div>
-                        </div>
-                        <div>
-                            <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-wider font-mono mb-1.5">Assigned Lead Investigator</label>
-                            <div class="relative">
-                                <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-500 text-xs"><i class="fa-solid fa-user-shield"></i></span>
-                                <input type="text" name="investigator_name" value="{{ active_device.investigator_name }}" placeholder="Analyst Name" class="w-full bg-gray-950 border border-gray-800 rounded-lg pl-8 pr-3 py-2 text-sm text-white focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none transition duration-150">
-                            </div>
-                        </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <input type="text" name="case_number" value="{{ active_device.case_number }}" class="bg-gray-950 border border-gray-800 rounded p-2 text-sm text-white font-mono w-full" placeholder="Case #">
+                        <input type="text" name="investigator_name" value="{{ active_device.investigator_name }}" class="bg-gray-950 border border-gray-800 rounded p-2 text-sm text-white w-full" placeholder="Investigator">
                     </div>
-                    <div>
-                        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-wider font-mono mb-1.5">Incident Scope & Triage Scope Notes</label>
-                        <textarea name="case_notes" rows="2" placeholder="Describe current workspace scope bounds, targeted threat vectors, or physical acquisition environment status..." class="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm text-gray-300 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none transition duration-150 resize-none font-sans leading-relaxed">{{ active_device.case_notes }}</textarea>
-                    </div>
-                    <div class="text-right pt-1">
-                        <button type="submit" class="inline-flex items-center space-x-1.5 bg-gray-800 hover:bg-gray-700 text-cyan-400 hover:text-cyan-300 font-bold text-xs font-mono px-4 py-2 rounded-lg border border-gray-700 hover:border-cyan-500 transition-all duration-150 cursor-pointer shadow-md">
-                            <i class="fa-solid fa-floppy-disk"></i>
-                            <span>Commit Case Parameters</span>
-                        </button>
+                    <textarea name="case_notes" rows="2" class="w-full bg-gray-950 border border-gray-800 rounded p-2 text-sm text-gray-300" placeholder="Case Notes...">{{ active_device.case_notes }}</textarea>
+                    <div class="flex gap-2">
+                        <button type="submit" class="bg-gray-800 hover:bg-gray-700 text-cyan-400 text-xs px-4 py-2 rounded border border-gray-700">Commit Parameters</button>
+                        <a href="{% url 'trigger_forensic_scan' active_device.device_id %}" class="bg-cyan-600 hover:bg-cyan-500 text-white text-xs px-4 py-2 rounded font-bold">Run Forensic Scan</a>
                     </div>
                 </form>
             </div>
 
-            <div class="rounded-xl border border-gray-800 bg-gray-950/40 p-5 backdrop-blur-md flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div>
-                    <h3 class="text-sm font-bold text-white font-mono uppercase tracking-wide">Execution Panel: {{ active_device.mount_point }}</h3>
-                    <p class="text-xs text-gray-400 mt-0.5">Initialize background threat harvesting pipelines for the target node.</p>
-                </div>
-                <div>
-                    <form method="POST" action="{% url 'trigger_forensic_scan' active_device.id %}">
-                        {% csrf_token %}
-                        <button type="submit" {% if active_device.status == 'SCANNING' %} disabled {% endif %} class="w-full sm:w-auto bg-cyan-600 hover:bg-cyan-500 disabled:bg-gray-800 disabled:text-gray-500 text-white font-bold font-mono text-xs px-5 py-2.5 rounded-lg border border-cyan-400/20 shadow-lg shadow-cyan-950/30 transition duration-150 cursor-pointer tracking-wider uppercase">
-                            {% if active_device.status == 'SCANNING' %}
-                                <i class="fa-solid fa-gear animate-spin mr-2"></i> Analyzing Target...
-                            {% else %}
-                                <i class="fa-solid fa-bolt mr-2 text-amber-300"></i> Execute Forensic Scan
-                            {% endif %}
-                        </button>
-                    </form>
-                </div>
-            </div>
-
-            <div class="rounded-xl border border-gray-800 bg-gray-950/40 backdrop-blur-md overflow-hidden">
-                <div class="border-b border-gray-800 bg-gray-900/40 px-5 py-4 flex items-center justify-between">
-                    <div class="flex items-center space-x-2">
-                        <i class="fa-solid fa-list-check text-gray-400"></i>
-                        <h3 class="text-xs font-bold uppercase tracking-wider text-gray-200 font-mono">Aggregated Indicators Ledger</h3>
-                    </div>
-                    <span class="text-[10px] font-mono bg-gray-900 text-gray-400 px-2 py-1 rounded border border-gray-800">
-                        TOTAL RECOVERY RECORDS: {{ artifacts|length }}
-                    </span>
-                </div>
-
-                <div class="overflow-x-auto">
-                    <table class="w-full text-left text-xs text-gray-300 border-collapse">
-                        <thead>
-                            <tr class="border-b border-gray-800 bg-gray-900/20 font-mono text-gray-400 uppercase text-[10px] tracking-wider">
-                                <th class="p-4 w-24">Severity</th>
-                                <th class="p-4 w-40">Classification</th>
-                                <th class="p-4">Target File Artifact Details</th>
-                                <th class="p-4">Extracted Core Metrics Data</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-gray-900 bg-gray-950/10">
-                            {% for artifact in artifacts %}
-                            <tr class="hover:bg-gray-900/30 transition duration-100 align-top group">
-                                <td class="p-4 font-mono font-bold">
-                                    {% if artifact.severity == 'CRITICAL' %}
-                                        <span class="bg-red-500/10 text-red-400 border border-red-500/30 px-2 py-0.5 rounded text-[10px] block text-center animate-pulse">CRITICAL</span>
-                                    {% elif artifact.severity == 'HIGH' %}
-                                        <span class="bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded text-[10px] block text-center">HIGH</span>
-                                    {% else %}
-                                        <span class="bg-blue-500/10 text-blue-400 border border-blue-500/30 px-2 py-0.5 rounded text-[10px] block text-center">LOW</span>
-                                    {% endif %}
-                                </td>
-                                <td class="p-4 font-bold font-mono tracking-wide text-gray-200">
-                                    {{ artifact.category }}
-                                </td>
-                                <td class="p-4">
-                                    <p class="font-bold text-white text-sm tracking-wide">{{ artifact.title }}</p>
-                                    
-                                    <div class="mt-2 space-y-0.5 font-mono text-[10px] text-gray-500">
-                                        {% if artifact.sha256_hash %}
-                                            <p class="flex items-center"><span class="text-gray-600 font-bold w-14 uppercase">SHA256:</span> <span class="text-gray-400 bg-gray-950/60 px-1 py-0.5 rounded select-all">{{ artifact.sha256_hash }}</span></p>
-                                        {% endif %}
-                                        {% if artifact.true_mime_type %}
-                                            <p class="flex items-center"><span class="text-gray-600 font-bold w-14 uppercase">MIME-T:</span> <span class="{% if artifact.is_spoofed %} text-red-400 font-bold bg-red-950/20 {% else %} text-gray-400 {% endif %} px-1 py-0.5 rounded">{{ artifact.true_mime_type }}</span></p>
-                                        {% endif %}
-                                    </div>
-                                </td>
-                                <td class="p-4 text-gray-400 font-mono text-[11px] leading-relaxed break-all">
-                                    <div class="bg-gray-950/40 border border-gray-900 rounded p-2 text-gray-300">
-                                        {{ artifact.extracted_data }}
-                                    </div>
-                                </td>
-                            </tr>
-                            {% empty %}
-                            <tr>
-                                <td colspan="4" class="text-center py-12 text-gray-500 font-mono italic">
-                                    <i class="fa-solid fa-circle-nodes text-2xl text-gray-700 block mb-2"></i>
-                                    No tracked indicators cataloged inside current target session index.
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
+            <div class="rounded-xl border border-gray-800 bg-gray-950/40 overflow-hidden">
+                <table class="w-full text-left text-xs text-gray-300">
+                    <thead>
+                        <tr class="border-b border-gray-800 bg-gray-900/20 font-mono text-gray-400 uppercase text-[10px]">
+                            <th class="p-4">Severity</th>
+                            <th class="p-4">Artifact</th>
+                            <th class="p-4">Payload Summary</th>
+                            <th class="p-4">Tools</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-900">
+                        {% for artifact in artifacts %}
+                        <tr class="align-top">
+                            <td class="p-4 {% if artifact.severity == 'CRITICAL' %}text-red-400{% endif %}">{{ artifact.severity }}</td>
+                            <td class="p-4 font-bold">{{ artifact.title }}</td>
+                            <td class="p-4 font-mono text-gray-500">{{ artifact.extracted_data|truncatechars:60 }}</td>
+                            <td class="p-4 space-x-2">
+                                <a href="{% url 'inspect_file' artifact.id %}" class="text-cyan-400 hover:underline font-bold">Inspect</a>
+                                <a href="{% url 'download_file' artifact.id %}" class="text-emerald-400 hover:underline font-bold">Download</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
             </div>
             {% else %}
-            <div class="rounded-xl border-2 border-dashed border-gray-800 bg-gray-950/10 p-16 text-center max-w-2xl mx-auto my-12">
-                <div class="h-16 w-16 bg-gray-900 border border-gray-800 rounded-2xl flex items-center justify-center mx-auto mb-4 text-gray-600">
-                    <i class="fa-solid fa-satellite-dish text-2xl animate-pulse text-cyan-500"></i>
-                </div>
-                <h3 class="text-base font-bold text-white font-mono uppercase tracking-widest">No Active Extraction Target Selected</h3>
-                <p class="text-xs text-gray-400 mt-2 max-w-sm mx-auto leading-relaxed">
-                    Select an indexed mass storage partition or a physical mobile hardware device link from the sidebar channel to initialize analysis bounds.
-                </p>
+            <div class="rounded-xl border-2 border-dashed border-gray-800 p-20 text-center text-gray-500">
+                <i class="fa-solid fa-satellite-dish text-4xl mb-4"></i>
+                <p>Select a node from the sidebar to initialize the forensic session.</p>
             </div>
             {% endif %}
-
         </main>
     </div>
-
 </body>
 </html>
