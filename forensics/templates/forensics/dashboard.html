@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>USB Forensic Center</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-slate-950 text-slate-100 font-sans antialiased">
+
+    <nav class="bg-slate-900 border-b border-slate-800 px-6 py-4 flex justify-between items-center fixed top-0 w-full z-50">
+        <div class="flex items-center space-x-3">
+            <i class="fa-solid fa-shield-halved text-cyan-400 text-2xl"></i>
+            <span class="text-xl font-bold tracking-wider text-white">USB<span class="text-cyan-400">FORENSICS</span></span>
+        </div>
+        <div class="flex items-center space-x-4">
+            <span class="text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-1 rounded-full font-medium">
+                <i class="fa-solid fa-circle text-[8px] mr-1.5 animate-pulse"></i> Workstation Online
+            </span>
+        </div>
+    </nav>
+
+    <div class="flex pt-20 h-screen overflow-hidden">
+        
+        <aside class="w-80 bg-slate-900/50 border-r border-slate-800 p-4 overflow-y-auto flex-shrink-0">
+            <div class="flex justify-between items-center mb-4 px-2">
+                <h2 class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Detected Hardware</h2>
+                <a href="{% url 'trigger_hardware_scan' %}" class="text-xs text-cyan-400 hover:underline"><i class="fa-solid fa-rotate mr-1"></i>Refresh</a>
+            </div>
+            
+            <div class="space-y-2">
+                {% for dev in devices %}
+                <a href="{% url 'device_detail' dev.id %}" class="block p-3 rounded-lg border {% if active_device.id == dev.id %}bg-slate-800/80 border-cyan-500/50{% else %}bg-slate-900 border-slate-800 hover:bg-slate-800/40{% endif %} transition">
+                    <div class="flex items-start justify-between">
+                        <div class="flex items-center space-x-3">
+                            {% if dev.device_type == 'ANDROID' %}
+                                <i class="fa-brands fa-android text-2xl text-emerald-400"></i>
+                            {% else %}
+                                <i class="fa-solid fa-hdd text-2xl text-cyan-400"></i>
+                            {% endif %}
+                            <div>
+                                <h3 class="font-medium text-sm text-white truncate max-w-[140px]">{{ dev.label }}</h3>
+                                <p class="text-xs text-slate-400 font-mono mt-0.5">{{ dev.mount_point }}</p>
+                            </div>
+                        </div>
+                        <span class="text-[10px] uppercase px-2 py-0.5 rounded font-mono font-bold
+                            {% if dev.status == 'COMPLETED' %}bg-emerald-500/10 text-emerald-400
+                            {% elif dev.status == 'SCANNING' %}bg-amber-500/10 text-amber-400 animate-pulse
+                            {% elif dev.status == 'FAILED' %}bg-rose-500/10 text-rose-400
+                            {% else %}bg-slate-700 text-slate-300{% endif %}">
+                            {{ dev.status }}
+                        </span>
+                    </div>
+                </a>
+                {% empty %}
+                <p class="text-xs text-slate-500 text-center py-6">No target devices detected yet.</p>
+                {% endfor %}
+            </div>
+        </aside>
+
+        <main class="flex-1 bg-slate-950 p-6 overflow-y-auto">
+            {% if active_device %}
+                <div class="bg-slate-900 border border-slate-800 rounded-xl p-6 mb-6 flex justify-between items-center">
+                    <div>
+                        <span class="text-xs font-mono text-cyan-400 font-bold uppercase tracking-wider">{{ active_device.device_type }} Target</span>
+                        <h1 class="text-2xl font-bold text-white mt-1">{{ active_device.label }}</h1>
+                        <p class="text-sm text-slate-400 font-mono mt-1">UUID: {{ active_device.device_id }}</p>
+                    </div>
+                    <div>
+                        {% if active_device.status != 'SCANNING' %}
+                            <a href="{% url 'trigger_forensic_scan' active_device.id %}" class="bg-cyan-500 hover:bg-cyan-600 text-slate-950 px-5 py-2.5 rounded-lg font-semibold shadow-lg shadow-cyan-500/20 transition flex items-center space-x-2">
+                                <i class="fa-solid fa-bolt"></i> <span>Execute Forensic Scan</span>
+                            </a>
+                        {% else %}
+                            <button disabled class="bg-slate-800 text-slate-500 px-5 py-2.5 rounded-lg font-semibold cursor-not-allowed flex items-center space-x-2">
+                                <i class="fa-solid fa-spinner animate-spin"></i> <span>Auditing System...</span>
+                            </button>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl">
+                        <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Total Discovered Logs</p>
+                        <p class="text-3xl font-bold text-white mt-2">{{ artifacts.count }}</p>
+                    </div>
+                    <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl">
+                        <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Last Scan Date</p>
+                        <p class="text-sm font-mono font-bold text-slate-300 mt-3">
+                            {% if active_device.last_scanned_at %}{{ active_device.last_scanned_at|date:"Y-m-d H:i:s" }}{% else %}Never Scanned{% endif %}
+                        </p>
+                    </div>
+                    <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl">
+                        <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Security State</p>
+                        <p class="text-sm font-bold mt-2">
+                            {% if active_device.status == 'COMPLETED' %}
+                                <span class="text-emerald-400"><i class="fa-solid fa-shield-check mr-1.5"></i>Analysis Complete</span>
+                            {% elif active_device.status == 'SCANNING' %}
+                                <span class="text-amber-400"><i class="fa-solid fa-magnifying-glass-chart mr-1.5 animate-pulse"></i>Parsing Targets</span>
+                            {% else %}
+                                <span class="text-slate-400">Awaiting Assessment</span>
+                            {% endif %}
+                        </p>
+                    </div>
+                </div>
+
+                <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+                    <div class="px-6 py-4 border-b border-slate-800 bg-slate-900/50">
+                        <h2 class="text-md font-semibold text-white">Extracted Forensic Ledger</h2>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="border-b border-slate-800 bg-slate-950/40 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                                    <th class="px-6 py-3">Severity</th>
+                                    <th class="px-6 py-3">Finding Classification</th>
+                                    <th class="px-6 py-3">Summary Description</th>
+                                    <th class="px-6 py-3">Extracted Metadata Payload</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-800 text-sm text-slate-300">
+                                {% for art in artifacts %}
+                                <tr class="hover:bg-slate-800/30 transition">
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <span class="text-[11px] font-bold px-2.5 py-1 rounded font-mono
+                                            {% if art.severity == 'CRITICAL' or art.severity == 'HIGH' %}bg-rose-500/10 text-rose-400 border border-rose-500/20
+                                            {% elif art.severity == 'MEDIUM' %}bg-amber-500/10 text-amber-400 border border-amber-500/20
+                                            {% else %}bg-slate-800 text-slate-400{% endif %}">
+                                            {{ art.severity }}
+                                        </span>
+                                    </td>
+                                    <td class="px-6 py-4 font-medium text-white whitespace-nowrap">{{ art.category }}</td>
+                                    <td class="px-6 py-4">{{ art.title }}</td>
+                                    <td class="px-6 py-4 font-mono text-xs max-w-xs truncate text-cyan-400/90" title="{{ art.extracted_data }}">
+                                        {{ art.extracted_data }}
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="4" class="px-6 py-12 text-center text-slate-500 text-sm">
+                                        <i class="fa-solid fa-folder-open text-3xl mb-3 block text-slate-600"></i>
+                                        No forensic findings registered for this device. Run a scan above to start mapping artifacts.
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            {% else %}
+                <div class="h-full flex flex-col justify-center items-center text-center">
+                    <div class="w-16 h-16 bg-slate-900 border border-slate-800 rounded-2xl flex items-center justify-center mb-4 shadow-xl">
+                        <i class="fa-solid fa-usb-drive text-2xl text-slate-400"></i>
+                    </div>
+                    <h1 class="text-xl font-bold text-white">Forensic Workstation Unit Ready</h1>
+                    <p class="text-sm text-slate-400 mt-2 max-w-sm">Connect a target USB mass storage drive or ensure an Android device is accessible via the ADB daemon pipeline, then select it from the sidebar registry.</p>
+                </div>
+            {% endif %}
+        </main>
+
+    </div>
+
+</body>
+</html>
